@@ -4,18 +4,19 @@ from bs4 import BeautifulSoup
 from graphviz import Digraph
 from urllib.parse import urlparse
 
+HORIZONTAL_LIMIT = 5
+VERTICAL_LIMIT = 5
+
 graph = Digraph()
 history = []
 paths = [['/2020/03/preserving-optionality/', 0]]
 
 def main():
     while len(paths) > 0:
-        if len(paths) > 100:
-            break
         [path, depth] = paths.pop()
         scrape_path(path, depth)
 
-    graph.render('output.gv')
+    graph.save('output.dot')
 
 def scrape_path(path, depth):
     print(f'{len(paths) + 1} paths remaining.')
@@ -30,9 +31,13 @@ def scrape_path(path, depth):
     graph.node(path, title)
 
     links = soup.find_all('a')
-    for link in links:
-        url = link.get('href')
-        queue_url(path, url, depth)
+    urls = map(lambda link: link.get('href'), links)
+    dest_paths = map(filter_and_normalize_url, urls)
+    dest_paths = filter(lambda path: path, dest_paths)
+    dest_paths = list(dest_paths)
+    dest_paths = dest_paths[:min(len(dest_paths), HORIZONTAL_LIMIT)]
+    for dest_path in dest_paths:
+        queue_path(path, dest_path, depth)
 
 def filter_and_normalize_url(url):
     url = urlparse(url)
@@ -44,16 +49,15 @@ def filter_and_normalize_url(url):
         return None
     return url.path
 
-def queue_url(src_path, url, depth):
-    dest_path = filter_and_normalize_url(url)
-    if depth > 2:
+def queue_path(src_path, dest_path, depth):
+    if depth > VERTICAL_LIMIT:
         return
     if dest_path is None:
         return
+    graph.edge(src_path, dest_path)
     if dest_path in history:
         return
     paths.append([dest_path, depth + 1])
-    graph.edge(src_path, dest_path)
 
 
 def get_title(soup):
